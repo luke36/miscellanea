@@ -8,6 +8,7 @@ open import Data.Nat using (ℕ; zero; suc)
 open import Data.String using (String; _≟_)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
 open import Relation.Nullary using (Dec; yes; no; ¬_; _because_; ofʸ; ofⁿ)
+open import Relation.Nullary.Decidable using (True; False; toWitness; toWitnessFalse)
 open import Agda.Builtin.Bool using (true; false)
 
 Id : Set
@@ -141,7 +142,7 @@ lift {Γ} {Δ} σ x p with separateContext Γ Δ p
 ... | in-Δ q = σ x q
 
 data Instantiate (Γ : KindContext) : KindContext → Set where
-  ∅     : Instantiate Γ ∅
+  ∅   : Instantiate Γ ∅
   _,_ : ∀ {Δ} {K} {x} → Instantiate Γ Δ → Γ ⊩ K → Instantiate Γ (Δ , x ⦂⦂ K)
 
 doInstantiate : ∀ {Γ Δ}
@@ -157,25 +158,25 @@ substParameter σ t = subst (lift (doInstantiate σ)) t
 
 infix  4  _⊢_
 
-infixr 7  _∙_
+infixl 7  _∙_
 infix  9  `_
 
 data _⊢_ {Γ : KindContext} (Δ : TypeContext Γ) : Γ ⊩ ⋆ → Set where
   `_  : ∀ {Γ' : KindContext} {T}
         → (x : Id) → {p : Δ ∋ x ⦂ [ Γ' , T ]}
         → (σ : Instantiate Γ Γ')
-        ------------
+          ------------
         → Δ ⊢ substParameter σ T
   _∙_ : ∀ {a b}
         → Δ ⊢ a ⇒ b
         → Δ ⊢ a
-        ------------
+          ------------
         → Δ ⊢ b
 
 composeKindContextDenote : ∀ {Γ Δ}
   → KindContextDenote Γ
   → KindContextDenote Δ
-  ---------------------
+    ---------------------
   → KindContextDenote (Γ ⨟ Δ)
 composeKindContextDenote E ∅ = E
 composeKindContextDenote E (F , V) = composeKindContextDenote E F , V
@@ -187,39 +188,22 @@ data TypeContextDenote {Γ : KindContext} (E : KindContextDenote Γ) :
         → TypeContextDenote E Γ'
         → ((F : KindContextDenote Δ) →
             T-⟦ T In composeKindContextDenote E F ⟧)
-        ------------------
+          ------------------
         → TypeContextDenote E (Γ' , x ⦂ [ Δ , T ])
-
-instantiationDenoteType : ∀ {Γ K}
-  → KindContextDenote Γ
-  → Γ ⊩ K
-  ------------
-  → K-⟦ K ⟧
-instantiationDenoteType E (``_ x {p}) = typeIdDenote x p E
-instantiationDenoteType E (s ∘ t) = (instantiationDenoteType E s) (instantiationDenoteType E t)
-instantiationDenoteType E (s ⇒ t) = (instantiationDenoteType E s) → (instantiationDenoteType E t)
 
 instantiationDenote : ∀ {Γ Δ}
   → KindContextDenote Γ
   → Instantiate Γ Δ
-  ------------------
+    ------------------
   → KindContextDenote Δ
 instantiationDenote E ∅       = ∅
-instantiationDenote E (σ , K) = (instantiationDenote E σ) , instantiationDenoteType E K
-
-T-⟦⟧-≡-instantiate : ∀ {Γ K} (E : KindContextDenote Γ) (T : Γ ⊩ K) →
-  T-⟦ T In E ⟧ ≡ instantiationDenoteType E T
-T-⟦⟧-≡-instantiate E (`` x) = refl
-T-⟦⟧-≡-instantiate E (s ∘ t)
-  rewrite (T-⟦⟧-≡-instantiate E s) rewrite (T-⟦⟧-≡-instantiate E t) = refl
-T-⟦⟧-≡-instantiate E (s ⇒ t)
-  rewrite (T-⟦⟧-≡-instantiate E s) rewrite (T-⟦⟧-≡-instantiate E t) = refl
+instantiationDenote E (σ , K) = (instantiationDenote E σ) , T-⟦ K In E ⟧
 
 subst-≢ : ∀ {Γ Δ J K V}
           → (σ : Instantiate Γ Δ)
           → (x y : Id) → (neq : x ≢ y)
           → (p : Γ ⨟ Δ ∋ x ⦂⦂ K) → (q : Γ ⨟ (Δ , y ⦂⦂ J) ∋ x ⦂⦂ K) → (q ≡ S neq p)
-          ------------
+            ------------
           → substParameter (σ , V) (``_ x {q}) ≡ substParameter σ (``_ x {p})
 subst-≢ {Γ} {Δ} {J} σ x y x≢y p neq eq
   rewrite eq with separateContext Γ Δ p
@@ -231,14 +215,14 @@ subst-≡-compose-id : ∀ {Γ Δ K} → (σ : Instantiate Γ Δ) → (E : KindC
   → T-⟦ substParameter σ (``_ x {p}) In E ⟧
   ≡ typeIdDenote x p
       (composeKindContextDenote E (instantiationDenote E σ))
-subst-≡-compose-id {Γ} {.∅} ∅ E x p = refl
-subst-≡-compose-id {Γ} {.(_ , x ⦂⦂ _)} (σ , T) E x Z = T-⟦⟧-≡-instantiate E T
+subst-≡-compose-id {Γ} {.∅} ∅ e x p = refl
+subst-≡-compose-id {Γ} {.(_ , x ⦂⦂ _)} (σ , x₁) e x Z = refl
 subst-≡-compose-id {Γ} {Δ , w ⦂⦂ J} {K} (σ , z) E x (S y p)
   rewrite subst-≢ {Γ} {Δ} {J} {K} {z} σ x w y p (S y p) refl = subst-≡-compose-id σ E x p
 
 subst-≡-compose : ∀ {Γ Δ K}
   → (σ : Instantiate Γ Δ) → (T : Γ ⨟ Δ ⊩ K) → (E : KindContextDenote Γ)
-  ------------
+    ------------
   → T-⟦ substParameter σ T In E ⟧
   ≡ T-⟦ T In composeKindContextDenote E (instantiationDenote E σ) ⟧
 subst-≡-compose σ (``_ x {p}) E = subst-≡-compose-id σ E x p
@@ -261,4 +245,86 @@ termIdDenote x (S y p) σ (M , _) = termIdDenote x p σ M
   → T-⟦ T In E ⟧
 ⟦ `_ x {p} σ In E ⟧ = termIdDenote x p σ E
 ⟦ a ∙ b In E ⟧      = ⟦ a In E ⟧ ⟦ b In E ⟧
+
+--- test
+
+Z' : ∀ {Γ y K}
+     → {x : Id}
+     → {x≡y : True (x ≟ y)}
+       -------------------
+     → Γ , y ⦂⦂ K ∋ x ⦂⦂ K
+Z' {Γ} {y} {K} {x} {x≡y} with toWitness x≡y
+... | refl = Z
+
+S'_ : ∀ {Γ y K J}
+      → {x : Id}
+      → {x≢y : False (x ≟ y)}
+      → (Γ ∋ x ⦂⦂ K)
+        -------------------
+      → Γ , y ⦂⦂ J ∋ x ⦂⦂ K
+S'_ {Γ} {y} {K} {J} {x} {x≢y} Γ∋x with toWitnessFalse x≢y
+... | x≢y = S x≢y Γ∋x
+
+Z'' : ∀ {Δ y K} {Γ : TypeContext Δ}
+      → {x : Id}
+      → {x≡y : True (x ≟ y)}
+        -------------------
+      → Γ , y ⦂ K ∋ x ⦂ K
+Z'' {Γ} {Δ} {y} {K} {x} {x≡y} with toWitness x≡y
+... | refl = Z
+
+S''_ : ∀ {Δ y K J} {Γ : TypeContext Δ}
+       → {x : Id}
+       → {x≢y : False (x ≟ y)}
+       → (Γ ∋ x ⦂ K)
+         -------------------
+       → Γ , y ⦂ J ∋ x ⦂ K
+S''_ {Γ} {Δ} {y} {K} {J} {x} {x≢y} Γ∋x with toWitnessFalse x≢y
+... | x≢y = S x≢y Γ∋x
+
+K-Γ : KindContext
+K-Γ = ∅ , "nat" ⦂⦂ ⋆ , "list" ⦂⦂ ⋆ ⇛ ⋆
+
+nat0 : K-Γ ⊩ ⋆
+nat0 = ``_ "nat" {S' Z'}
+list0 : K-Γ ⊩ ⋆ ⇛ ⋆
+list0 = ``_ "list" {Z'}
+nat1 : ∀ {x K} → {x≢y : False ("nat" ≟ x)} → K-Γ , x ⦂⦂ K ⊩ ⋆
+nat1 {x} {K} {x≢y} = ``_ "nat" {S'_ {K-Γ} {x} {⋆} {K} {"nat"} {x≢y} (S' Z')}
+list1 : ∀ {x K} → {x≢y : False ("list" ≟ x)} → K-Γ , x ⦂⦂ K ⊩ ⋆ ⇛ ⋆
+list1 {x} {K} {x≢y} = ``_ "list" {S'_ {K-Γ} {x} {⋆ ⇛ ⋆} {K} {"list"} {x≢y} Z'}
+T0 : K-Γ , "T" ⦂⦂ ⋆ ⊩ ⋆
+T0 = ``_ "T" {Z'}
+
+T-Γ : TypeContext K-Γ
+T-Γ = ∅ , "zero" ⦂ [ ∅ , nat0 ]
+        , "succ" ⦂ [ ∅ , nat0 ⇒ nat0 ]
+        , "nil"  ⦂ [ ∅ , "T" ⦂⦂ ⋆ , list1 ∘ T0 ]
+        , "cons" ⦂ [ ∅ , "T" ⦂⦂ ⋆ , T0 ⇒ list1 ∘ T0 ⇒ list1 ∘ T0 ]
+        , "car"  ⦂ [ ∅ , "T" ⦂⦂ ⋆ , T0 ⇒ list1 ∘ T0 ⇒ T0 ]
+
+zer : T-Γ ⊢ nat0
+zer = `_ "zero" {S'' S'' S'' S'' Z''} ∅
+succ : T-Γ ⊢ nat0 ⇒ nat0
+succ = `_ "succ" {S'' S'' S'' Z''} ∅
+nil : T-Γ ⊢ list0 ∘ nat0
+nil = `_ "nil" {S'' S'' Z''} (∅ , nat0)
+cons : T-Γ ⊢ nat0 ⇒ list0 ∘ nat0 ⇒ list0 ∘ nat0
+cons = `_ "cons" {S'' Z''} (∅ , nat0)
+car : T-Γ ⊢ nat0 ⇒ list0 ∘ nat0 ⇒ nat0
+car = `_ "car" {Z''} (∅ , nat0)
+
+
+K-⟦⟧ : KindContextDenote K-Γ
+K-⟦⟧ = ∅ , ℕ , List
+
+T-⟦⟧ : TypeContextDenote K-⟦⟧ T-Γ
+T-⟦⟧ = ∅ , (λ { ∅ → zero })
+         , (λ { ∅ → suc })
+         , (λ { (∅ , T) → [] })
+         , (λ { (∅ , T) → _∷_ })
+         , (λ { (∅ , T) → λ { x [] → x ; x (y ∷ l) → y} })
+
+_ : ⟦ car ∙ (succ ∙ zer) ∙ (cons ∙ zer ∙ nil) In T-⟦⟧ ⟧ ≡ zero
+_ = refl
 

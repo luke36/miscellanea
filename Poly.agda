@@ -1,18 +1,17 @@
 --- encode the type system of the assertion language in VST-IDE
 
+{-# OPTIONS --without-K #-}
+
 module plfa.part2.Poly where
 
 open import Data.Empty using (⊥; ⊥-elim)
 open import Data.List using (List; _∷_; [])
-open import Data.Nat using (ℕ; zero; suc)
-open import Data.String using (String; _≟_)
+open import Data.Product using (_×_; Σ; Σ-syntax; proj₁; proj₂) renaming (_,_ to ⟨_,_⟩)
+open import Data.Nat using (ℕ; zero; suc; _<_; _≤?_; z≤n; s≤s)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl)
 open import Relation.Nullary using (Dec; yes; no; ¬_; _because_; ofʸ; ofⁿ)
 open import Relation.Nullary.Decidable using (True; False; toWitness; toWitnessFalse)
 open import Agda.Builtin.Bool using (true; false)
-
-Id : Set
-Id = String
 
 data Kind : Set where
  ⋆    :  Kind
@@ -32,25 +31,25 @@ kind-≟ (j ⇛ j') (k ⇛ k') with kind-≟ j k
 ...              | yes j'≡k' rewrite j≡k rewrite j'≡k' = true because ofʸ refl
 ...              | no ¬j'≡k' = false because ofⁿ λ { refl → ¬j'≡k' refl }
 
-infixl 5  _,_⦂⦂_
+infixl 5  _,_
 
 data KindContext : Set where
-  ∅      : KindContext
-  _,_⦂⦂_ : KindContext → Id → Kind → KindContext
+  ∅   : KindContext
+  _,_ : KindContext → Kind → KindContext
 
-infix  4  _∋_⦂⦂_
+infix  4  _∋-K_
+infix  9  S_
 
-data _∋_⦂⦂_ : KindContext → Id → Kind → Set where
+data _∋-K_ : KindContext → Kind → Set where
 
-  Z : ∀ {Γ x A}
-      ------------------
-    → Γ , x ⦂⦂ A ∋ x ⦂⦂ A
+  Z : ∀ {Γ A}
+        ------------
+      → Γ , A ∋-K A
 
-  S : ∀ {Γ x y A B}
-    → x ≢ y
-    → Γ ∋ x ⦂⦂ A
-      ------------------
-    → Γ , y ⦂⦂ B ∋ x ⦂⦂ A
+  S_ : ∀ {Γ A B}
+     → Γ ∋-K A
+       ------------
+     → Γ , B ∋-K A
 
 infixr 7  _⇒_
 infixl 8  _∘_
@@ -59,97 +58,92 @@ infix  9  ``_
 infix  4  _⊩_
 
 data _⊩_ (Γ : KindContext) : Kind → Set where
-  ``_  :  ∀ {k} → (x : Id) → {Γ ∋ x ⦂⦂ k} → Γ ⊩ k
+  ``_  :  ∀ {k} → (Γ ∋-K k) → Γ ⊩ k
   _∘_  :  ∀ {j k} → Γ ⊩ j ⇛ k → Γ ⊩ j → Γ ⊩ k
   _⇒_  :  Γ ⊩ ⋆ → Γ ⊩ ⋆ → Γ ⊩ ⋆
 
-infixl 5  _,_
-
 data KindContextDenote : KindContext → Set₁ where
   ∅   : KindContextDenote ∅
-  _,_ : ∀ {Γ x k}
-      → KindContextDenote Γ
-      → K-⟦ k ⟧
-      ------------------
-      → KindContextDenote (Γ , x ⦂⦂ k)
+  _,_ : ∀ {Γ k}
+        → KindContextDenote Γ
+        → K-⟦ k ⟧
+          ------------------
+        → KindContextDenote (Γ , k)
 
-typeIdDenote : ∀ {Γ : KindContext} {k} → (x : Id) → (Γ ∋ x ⦂⦂ k) → KindContextDenote Γ → K-⟦ k ⟧
-typeIdDenote {Γ , .x ⦂⦂ .k} {k} x Z (E , K)     = K
-typeIdDenote {Γ , _ ⦂⦂ _} {k} y (S p n) (E , _) = typeIdDenote y n E
+typeIdDenote : ∀ {Γ : KindContext} {k} → (Γ ∋-K k) → KindContextDenote Γ → K-⟦ k ⟧
+typeIdDenote {Γ , .k} {k} Z (E , K)    = K
+typeIdDenote {Γ , _} {k} (S n) (E , _) = typeIdDenote n E
 
 T-⟦_In_⟧ : ∀ {Γ : KindContext} {k} → Γ ⊩ k → KindContextDenote Γ → K-⟦ k ⟧
-T-⟦ ``_ x {proof} In E ⟧ = typeIdDenote x proof E
-T-⟦ a ∘ b In E ⟧         = T-⟦ a In E ⟧ T-⟦ b In E ⟧
-T-⟦ a ⇒ b In E ⟧         = T-⟦ a In E ⟧ → T-⟦ b In E ⟧
+T-⟦ `` x In E ⟧  = typeIdDenote x E
+T-⟦ a ∘ b In E ⟧ = T-⟦ a In E ⟧ T-⟦ b In E ⟧
+T-⟦ a ⇒ b In E ⟧ = T-⟦ a In E ⟧ → T-⟦ b In E ⟧
 
 infix  5  _⨟_
 
 _⨟_ : KindContext → KindContext → KindContext
 Γ ⨟ ∅            = Γ
-Γ ⨟ (Δ , x ⦂⦂ A) = (Γ ⨟ Δ) , x ⦂⦂ A
+Γ ⨟ (Δ , A) = (Γ ⨟ Δ) , A
 
 --- type scheme
 infix  4  _⊩Δ_
 
 data _⊩Δ_ (Γ : KindContext) (K : Kind) : Set where
-  [_,_] : (Δ : KindContext) → Γ ⨟ Δ ⊩ K → Γ ⊩Δ K
-
-infixl 5  _,_⦂_
+  [_&_] : (Δ : KindContext) → Γ ⨟ Δ ⊩ K → Γ ⊩Δ K
 
 data TypeContext (Γ : KindContext) : Set where
-  ∅      : TypeContext Γ
-  _,_⦂_  : TypeContext Γ → Id → Γ ⊩Δ ⋆ → TypeContext Γ
+  ∅    : TypeContext Γ
+  _,_  : TypeContext Γ → Γ ⊩Δ ⋆ → TypeContext Γ
 
-infixl 4  _∋_⦂_
+infix  4 _∋_
 
-data _∋_⦂_ {Γ : KindContext} : TypeContext Γ → Id → Γ ⊩Δ ⋆ → Set where
+data _∋_ {Γ : KindContext} : TypeContext Γ → Γ ⊩Δ ⋆ → Set where
 
-  Z : ∀ {Δ x A}
+  Z : ∀ {Δ A}
       ------------------
-    → Δ , x ⦂ A ∋ x ⦂ A
+    → Δ , A ∋ A
 
-  S : ∀ {Δ x y A B}
-    → x ≢ y
-    → Δ ∋ x ⦂ A
-      ------------------
-    → Δ , y ⦂ B ∋ x ⦂ A
+  S_ : ∀ {Δ A B}
+     → Δ ∋ A
+       ------------------
+     → Δ , B ∋ A
 
 subst : ∀ {Γ Δ}
-  → (∀ {K} → (x : Id) → (Γ ∋ x ⦂⦂ K) → Δ ⊩ K)
+  → (∀ {K} → Γ ∋-K K → Δ ⊩ K)
   → (∀ {K} → Γ ⊩ K → Δ ⊩ K)
-subst σ (``_ x {proof}) = σ x proof
+subst σ (`` x)  = σ x
 subst σ (t ∘ s) = (subst σ t) ∘ (subst σ s)
 subst σ (s ⇒ t) = (subst σ s) ⇒ (subst σ t)
 
-data SeparateContextCase {x} {K} (Γ Δ : KindContext)
-       (In : Γ ⨟ Δ ∋ x ⦂⦂ K) : Set where
-  in-Γ : Γ ∋ x ⦂⦂ K → SeparateContextCase Γ Δ In
-  in-Δ : Δ ∋ x ⦂⦂ K → SeparateContextCase Γ Δ In
+data SeparateContextCase {K} (Γ Δ : KindContext)
+       (In : Γ ⨟ Δ ∋-K K) : Set where
+  in-Γ : Γ ∋-K K → SeparateContextCase Γ Δ In
+  in-Δ : Δ ∋-K K → SeparateContextCase Γ Δ In
 
-separateContext : ∀ {x} {K} (Γ Δ : KindContext)
-  → (In : Γ ⨟ Δ ∋ x ⦂⦂ K) → SeparateContextCase Γ Δ In
+separateContext : ∀ {K} (Γ Δ : KindContext)
+  → (In : Γ ⨟ Δ ∋-K K) → SeparateContextCase Γ Δ In
 separateContext Γ ∅ p            = in-Γ p
-separateContext Γ (Δ , x ⦂⦂ K) Z = in-Δ Z
-separateContext Γ (Δ , x ⦂⦂ K) (S y p) with separateContext Γ Δ p
+separateContext Γ (Δ , K) Z = in-Δ Z
+separateContext Γ (Δ , K) (S n) with separateContext Γ Δ n
 ... | in-Γ p = in-Γ p
-... | in-Δ q = in-Δ (S y q)
+... | in-Δ q = in-Δ (S q)
 
 lift : ∀ {Γ Δ}
-  → (∀ {K} → (x : Id) → Δ ∋ x ⦂⦂ K → Γ ⊩ K)
-  → (∀ {K} → (x : Id) → Γ ⨟ Δ ∋ x ⦂⦂ K → Γ ⊩ K)
-lift {Γ} {Δ} σ x p with separateContext Γ Δ p
-... | in-Γ p = ``_ x {p}
-... | in-Δ q = σ x q
+  → (∀ {K} → Δ ∋-K K → Γ ⊩ K)
+  → (∀ {K} → Γ ⨟ Δ ∋-K K → Γ ⊩ K)
+lift {Γ} {Δ} σ p with separateContext Γ Δ p
+... | in-Γ p = `` p
+... | in-Δ q = σ q
 
 data Instantiate (Γ : KindContext) : KindContext → Set where
   ∅   : Instantiate Γ ∅
-  _,_ : ∀ {Δ} {K} {x} → Instantiate Γ Δ → Γ ⊩ K → Instantiate Γ (Δ , x ⦂⦂ K)
+  _,_ : ∀ {Δ} {K} → Instantiate Γ Δ → Γ ⊩ K → Instantiate Γ (Δ , K)
 
 doInstantiate : ∀ {Γ Δ}
   → Instantiate Γ Δ
-  → ∀ {K} → (x : Id) → Δ ∋ x ⦂⦂ K → Γ ⊩ K
-doInstantiate (σ , K) x Z       = K
-doInstantiate (σ , K) x (S y p) = doInstantiate σ x p
+  → ∀ {K} → Δ ∋-K K → Γ ⊩ K
+doInstantiate (σ , K) Z     = K
+doInstantiate (σ , K) (S n) = doInstantiate σ n
 
 substParameter : ∀ {Γ Δ}
   → (Instantiate Γ Δ)
@@ -159,11 +153,11 @@ substParameter σ t = subst (lift (doInstantiate σ)) t
 infix  4  _⊢_
 
 infixl 7  _∙_
-infix  9  `_
+infix  9  `_∙_
 
 data _⊢_ {Γ : KindContext} (Δ : TypeContext Γ) : Γ ⊩ ⋆ → Set where
-  `_  : ∀ {Γ' : KindContext} {T}
-        → (x : Id) → {p : Δ ∋ x ⦂ [ Γ' , T ]}
+  `_∙_  : ∀ {Γ' : KindContext} {T}
+        → (p : Δ ∋ [ Γ' & T ])
         → (σ : Instantiate Γ Γ')
           ------------
         → Δ ⊢ substParameter σ T
@@ -184,12 +178,12 @@ composeKindContextDenote E (F , V) = composeKindContextDenote E F , V
 data TypeContextDenote {Γ : KindContext} (E : KindContextDenote Γ) :
   TypeContext Γ → Set₁ where
   ∅   : TypeContextDenote E ∅
-  _,_ : ∀ {Γ' Δ x T}
+  _,_ : ∀ {Γ' Δ T}
         → TypeContextDenote E Γ'
         → ((F : KindContextDenote Δ) →
             T-⟦ T In composeKindContextDenote E F ⟧)
           ------------------
-        → TypeContextDenote E (Γ' , x ⦂ [ Δ , T ])
+        → TypeContextDenote E (Γ' , [ Δ & T ])
 
 instantiationDenote : ∀ {Γ Δ}
   → KindContextDenote Γ
@@ -199,121 +193,109 @@ instantiationDenote : ∀ {Γ Δ}
 instantiationDenote E ∅       = ∅
 instantiationDenote E (σ , K) = (instantiationDenote E σ) , T-⟦ K In E ⟧
 
-subst-≢ : ∀ {Γ Δ J K V}
+subst-S-≡ : ∀ {Γ Δ J K V}
           → (σ : Instantiate Γ Δ)
-          → (x y : Id) → (neq : x ≢ y)
-          → (p : Γ ⨟ Δ ∋ x ⦂⦂ K) → (q : Γ ⨟ (Δ , y ⦂⦂ J) ∋ x ⦂⦂ K) → (q ≡ S neq p)
+          → (p : Γ ⨟ Δ ∋-K K) → (q : Γ ⨟ (Δ , J) ∋-K K) → (q ≡ S p)
             ------------
-          → substParameter (σ , V) (``_ x {q}) ≡ substParameter σ (``_ x {p})
-subst-≢ {Γ} {Δ} {J} σ x y x≢y p neq eq
+          → substParameter (σ , V) (`` q) ≡ substParameter σ (`` p)
+subst-S-≡ {Γ} {Δ} {J} σ p q eq
   rewrite eq with separateContext Γ Δ p
 ... | in-Γ p = refl
 ... | in-Δ q = refl
 
-subst-≡-compose-id : ∀ {Γ Δ K} → (σ : Instantiate Γ Δ) → (E : KindContextDenote Γ)
-  → (x : Id) → (p : Γ ⨟ Δ ∋ x ⦂⦂ K)
-  → T-⟦ substParameter σ (``_ x {p}) In E ⟧
-  ≡ typeIdDenote x p
+subst-≡-compose-id : ∀ {Γ Δ K}
+  → (x : Γ ⨟ Δ ∋-K K) → (σ : Instantiate Γ Δ) → (E : KindContextDenote Γ)
+  → T-⟦ substParameter σ (`` x) In E ⟧
+    ------------------
+  ≡ typeIdDenote x
       (composeKindContextDenote E (instantiationDenote E σ))
-subst-≡-compose-id {Γ} {.∅} ∅ e x p = refl
-subst-≡-compose-id {Γ} {.(_ , x ⦂⦂ _)} (σ , x₁) e x Z = refl
-subst-≡-compose-id {Γ} {Δ , w ⦂⦂ J} {K} (σ , z) E x (S y p)
-  rewrite subst-≢ {Γ} {Δ} {J} {K} {z} σ x w y p (S y p) refl = subst-≡-compose-id σ E x p
+subst-≡-compose-id {Γ} {.∅} x ∅ E = refl
+subst-≡-compose-id {Γ} {_ , _} Z (σ , _) E = refl
+subst-≡-compose-id {Γ} {Δ , J} {K} (S x) (σ , V) E
+  rewrite (subst-S-≡ {Γ} {Δ} {J} {K} {V} σ x (S x) refl) = subst-≡-compose-id x σ E
 
 subst-≡-compose : ∀ {Γ Δ K}
   → (σ : Instantiate Γ Δ) → (T : Γ ⨟ Δ ⊩ K) → (E : KindContextDenote Γ)
     ------------
   → T-⟦ substParameter σ T In E ⟧
   ≡ T-⟦ T In composeKindContextDenote E (instantiationDenote E σ) ⟧
-subst-≡-compose σ (``_ x {p}) E = subst-≡-compose-id σ E x p
+subst-≡-compose σ (`` x) E = subst-≡-compose-id x σ E
 subst-≡-compose σ (t ∘ s) E
   rewrite (subst-≡-compose σ t E) rewrite (subst-≡-compose σ s E) = refl
 subst-≡-compose σ (t ⇒ s) E
   rewrite (subst-≡-compose σ t E) rewrite (subst-≡-compose σ s E) = refl
 
 termIdDenote : ∀ {Γ Γ' E} {Δ : TypeContext Γ} {T}
-  → (x : Id) → (Δ ∋ x ⦂ [ Γ' , T ])
+  → (Δ ∋ [ Γ' & T ])
   → (σ : Instantiate Γ Γ')
   → TypeContextDenote E Δ → T-⟦ substParameter σ T In E ⟧
-termIdDenote {Γ} {Γ'} {E} {Δ} {T} x Z σ (M , F)
+termIdDenote {Γ} {Γ'} {E} {Δ} {T} Z σ (M , F)
   rewrite (subst-≡-compose σ T E) = (F (instantiationDenote E σ))
-termIdDenote x (S y p) σ (M , _) = termIdDenote x p σ M
+termIdDenote (S p) σ (M , _) = termIdDenote p σ M
 
 ⟦_In_⟧ : ∀ {Γ E T} {Δ : TypeContext Γ}
   → Δ ⊢ T
   → TypeContextDenote E Δ
   → T-⟦ T In E ⟧
-⟦ `_ x {p} σ In E ⟧ = termIdDenote x p σ E
-⟦ a ∙ b In E ⟧      = ⟦ a In E ⟧ ⟦ b In E ⟧
+⟦ ` x ∙ σ In E ⟧ = termIdDenote x σ E
+⟦ a ∙ b In E ⟧   = ⟦ a In E ⟧ ⟦ b In E ⟧
 
 --- test
 
-Z' : ∀ {Γ y K}
-     → {x : Id}
-     → {x≡y : True (x ≟ y)}
-       -------------------
-     → Γ , y ⦂⦂ K ∋ x ⦂⦂ K
-Z' {Γ} {y} {K} {x} {x≡y} with toWitness x≡y
-... | refl = Z
+length-K : KindContext → ℕ
+length-K ∅        =  zero
+length-K (Γ , _)  =  suc (length-K Γ)
 
-S'_ : ∀ {Γ y K J}
-      → {x : Id}
-      → {x≢y : False (x ≟ y)}
-      → (Γ ∋ x ⦂⦂ K)
-        -------------------
-      → Γ , y ⦂⦂ J ∋ x ⦂⦂ K
-S'_ {Γ} {y} {K} {J} {x} {x≢y} Γ∋x with toWitnessFalse x≢y
-... | x≢y = S x≢y Γ∋x
+length-T : ∀ {Γ} → TypeContext Γ → ℕ
+length-T ∅        =  zero
+length-T (Γ , _)  =  suc (length-T Γ)
 
-Z'' : ∀ {Δ y K} {Γ : TypeContext Δ}
-      → {x : Id}
-      → {x≡y : True (x ≟ y)}
-        -------------------
-      → Γ , y ⦂ K ∋ x ⦂ K
-Z'' {Γ} {Δ} {y} {K} {x} {x≡y} with toWitness x≡y
-... | refl = Z
+count-K : ∀ {Γ} → {n : ℕ} → (p : n < length-K Γ) → Σ[ K ∈ Kind ] (Γ ∋-K K)
+count-K {Γ , K} {zero} (s≤s z≤n)  =  ⟨ K , Z ⟩ 
+count-K {Γ , _} {(suc n)} (s≤s p) with count-K p
+...                                  | ⟨ K , n ⟩ = ⟨ K , S n ⟩
 
-S''_ : ∀ {Δ y K J} {Γ : TypeContext Δ}
-       → {x : Id}
-       → {x≢y : False (x ≟ y)}
-       → (Γ ∋ x ⦂ K)
-         -------------------
-       → Γ , y ⦂ J ∋ x ⦂ K
-S''_ {Γ} {Δ} {y} {K} {J} {x} {x≢y} Γ∋x with toWitnessFalse x≢y
-... | x≢y = S x≢y Γ∋x
+count-T : ∀ {Γ Δ} → {n : ℕ} → (p : n < length-T Δ) → Σ[ T ∈ Γ ⊩Δ ⋆ ] (Δ ∋ T)
+count-T {Γ} {Δ , T} {zero} (s≤s z≤n)  =  ⟨ T , Z ⟩ 
+count-T {Γ} {Δ , _} {(suc n)} (s≤s p) with count-T p
+...                                  | ⟨ T , n ⟩ = ⟨ T , S n ⟩
+
+K-#_ : ∀ {Γ}
+    → (n : ℕ)
+    → {n∈Γ : True (suc n ≤? length-K Γ)}
+      --------------------------------
+    → Γ ⊩ proj₁ (count-K (toWitness n∈Γ))
+K-#_ n {n∈Γ} = `` proj₂ (count-K (toWitness n∈Γ))
+
+#-help : ∀ {Γ Δ}
+    → (n : ℕ)
+    → {n∈Γ : True (suc n ≤? length-T Δ)}
+      --------------------------------
+    → Σ[ Γ' ∈ KindContext ] (
+      Σ[ B  ∈ Γ ⨟ Γ' ⊩ ⋆ ] (
+        (σ : Instantiate Γ Γ')
+      → Δ ⊢ substParameter σ B))
+#-help n {n∈Γ} with count-T (toWitness n∈Γ)
+...                 | ⟨ [ Δ & T ] , x ⟩ = ⟨ Δ , ⟨ T , `_∙_ x ⟩ ⟩
+
+# : ∀ {Γ Δ}
+    → (n : ℕ)
+    → {n∈Γ : True (suc n ≤? length-T Δ)}
+      ------------
+    → (σ : Instantiate Γ (proj₁ (#-help {Γ} {Δ} n {n∈Γ})))
+    → Δ ⊢ substParameter σ (proj₁ (proj₂ (#-help {Γ} {Δ} n)))
+# n = proj₂ (proj₂ (#-help n))
 
 K-Γ : KindContext
-K-Γ = ∅ , "nat" ⦂⦂ ⋆ , "list" ⦂⦂ ⋆ ⇛ ⋆
-
-nat0 : K-Γ ⊩ ⋆
-nat0 = ``_ "nat" {S' Z'}
-list0 : K-Γ ⊩ ⋆ ⇛ ⋆
-list0 = ``_ "list" {Z'}
-nat1 : ∀ {x K} → {x≢y : False ("nat" ≟ x)} → K-Γ , x ⦂⦂ K ⊩ ⋆
-nat1 {x} {K} {x≢y} = ``_ "nat" {S'_ {K-Γ} {x} {⋆} {K} {"nat"} {x≢y} (S' Z')}
-list1 : ∀ {x K} → {x≢y : False ("list" ≟ x)} → K-Γ , x ⦂⦂ K ⊩ ⋆ ⇛ ⋆
-list1 {x} {K} {x≢y} = ``_ "list" {S'_ {K-Γ} {x} {⋆ ⇛ ⋆} {K} {"list"} {x≢y} Z'}
-T0 : K-Γ , "T" ⦂⦂ ⋆ ⊩ ⋆
-T0 = ``_ "T" {Z'}
+K-Γ = ∅ , ⋆
+        , ⋆ ⇛ ⋆
 
 T-Γ : TypeContext K-Γ
-T-Γ = ∅ , "zero" ⦂ [ ∅ , nat0 ]
-        , "succ" ⦂ [ ∅ , nat0 ⇒ nat0 ]
-        , "nil"  ⦂ [ ∅ , "T" ⦂⦂ ⋆ , list1 ∘ T0 ]
-        , "cons" ⦂ [ ∅ , "T" ⦂⦂ ⋆ , T0 ⇒ list1 ∘ T0 ⇒ list1 ∘ T0 ]
-        , "car"  ⦂ [ ∅ , "T" ⦂⦂ ⋆ , T0 ⇒ list1 ∘ T0 ⇒ T0 ]
-
-zer : T-Γ ⊢ nat0
-zer = `_ "zero" {S'' S'' S'' S'' Z''} ∅
-succ : T-Γ ⊢ nat0 ⇒ nat0
-succ = `_ "succ" {S'' S'' S'' Z''} ∅
-nil : T-Γ ⊢ list0 ∘ nat0
-nil = `_ "nil" {S'' S'' Z''} (∅ , nat0)
-cons : T-Γ ⊢ nat0 ⇒ list0 ∘ nat0 ⇒ list0 ∘ nat0
-cons = `_ "cons" {S'' Z''} (∅ , nat0)
-car : T-Γ ⊢ nat0 ⇒ list0 ∘ nat0 ⇒ nat0
-car = `_ "car" {Z''} (∅ , nat0)
-
+T-Γ = ∅ , [ ∅ & K-# 1 ]
+        , [ ∅ & K-# 1 ⇒ K-# 1 ]
+        , [ ∅ , ⋆ & K-# 1 ∘ K-# 0 ]
+        , [ ∅ , ⋆ & K-# 0 ⇒ K-# 1 ∘ K-# 0 ⇒ K-# 1 ∘ K-# 0 ]
+        , [ ∅ , ⋆ & K-# 0 ⇒ K-# 1 ∘ K-# 0 ⇒ K-# 0 ]
 
 K-⟦⟧ : KindContextDenote K-Γ
 K-⟦⟧ = ∅ , ℕ , List
@@ -325,6 +307,8 @@ T-⟦⟧ = ∅ , (λ { ∅ → zero })
          , (λ { (∅ , T) → _∷_ })
          , (λ { (∅ , T) → λ { x [] → x ; x (y ∷ l) → y} })
 
-_ : ⟦ car ∙ (succ ∙ zer) ∙ (cons ∙ zer ∙ nil) In T-⟦⟧ ⟧ ≡ zero
+_ : ⟦ # 0 (∅ , K-# 1) ∙
+        (# 3 ∅ ∙ # 4 ∅) ∙
+        (# 1 (∅ , K-# 1) ∙ # 4 ∅ ∙ # 2 (∅ , K-# 1)) In T-⟦⟧ ⟧ ≡ zero
 _ = refl
 

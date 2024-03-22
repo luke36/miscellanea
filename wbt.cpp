@@ -1,56 +1,65 @@
-#include <cstdio>
-
-typedef long long Data;
+#include <functional>
+#include <memory>
 
 namespace wbt {
 
+using std::shared_ptr;
+
+template<typename Data>
 struct Node;
 
-typedef Node *NodePtr;
+template<typename Data>
+using NodePtr = Node<Data> *;
 
+template<typename Data>
 struct Node {
-  int refcnt;
-  int size;
-  NodePtr left;
-  Data data;
-  NodePtr right;
-  Node(NodePtr left, Data data, NodePtr right);
-  Node(NodePtr left, Data data, NodePtr right, int size);
+  size_t refcnt;
+  size_t size;
+  NodePtr<Data> left;
+  shared_ptr<Data> data;
+  NodePtr<Data> right;
+  Node(NodePtr<Data> left, shared_ptr<Data> data, NodePtr<Data> right);
+  Node(NodePtr<Data> left, shared_ptr<Data> data, NodePtr<Data> right, size_t size);
 };
 
-inline int size(NodePtr t) {
-  if (t) {
+template<typename Data>
+inline size_t size(NodePtr<Data> t) {
+  if (t != nullptr) {
     return t->size;
   } else {
     return 0;
   }
 }
 
-inline void incref(NodePtr a) {
+template<typename Data>
+inline void incref(NodePtr<Data> a) {
   if (a != nullptr)
     a->refcnt += 1;
 }
 
-inline void decref(NodePtr a) {
+template<typename Data>
+inline void decref(NodePtr<Data> a) {
   if (a != nullptr)
     a->refcnt -= 1;
 }
-
-inline Node::Node(NodePtr left, Data data, NodePtr right)
+template<typename Data>
+inline Node<Data>::Node(NodePtr<Data> left, shared_ptr<Data> data, NodePtr<Data> right)
   : left(left), data(data), right(right), refcnt(0) {
   incref(left);
   incref(right);
   size = 1 + wbt::size(left) + wbt::size(right);
 }
 
-inline Node::Node(NodePtr left, Data data, NodePtr right, int size)
+template<typename Data>
+inline Node<Data>::Node(NodePtr<Data> left, shared_ptr<Data> data, NodePtr<Data> right, size_t size)
 : left(left), data(data), right(right), refcnt(0), size(size) {
   incref(left);
   incref(right);
 }
 
-inline NodePtr singleLeft(NodePtr a) {
-  NodePtr
+template<typename Data>
+inline NodePtr<Data> singleLeft(NodePtr<Data> a) {
+  NodePtr<Data>
     b = a->right,
     x = a->left,
     y = b->left,
@@ -64,7 +73,7 @@ inline NodePtr singleLeft(NodePtr a) {
     b->refcnt = 0;
     return b;
   } else if (a->refcnt == 0) {
-    int all_size = a->size;
+    size_t all_size = a->size;
     a->size -= size(z) + 1;
     a->right = y;
     incref(y);
@@ -78,8 +87,9 @@ inline NodePtr singleLeft(NodePtr a) {
   }
 }
 
-inline NodePtr singleRight(NodePtr b) {
-  NodePtr
+template<typename Data>
+inline NodePtr<Data> singleRight(NodePtr<Data> b) {
+  NodePtr<Data>
     a = b->left,
     x = a->left,
     y = a->right,
@@ -93,7 +103,7 @@ inline NodePtr singleRight(NodePtr b) {
     a->refcnt = 0;
     return a;
   } else if (b->refcnt == 0) {
-    int all_size = b->size;
+    size_t all_size = b->size;
     b->size -= size(x) + 1;
     b->left = y;
     incref(y);
@@ -107,8 +117,9 @@ inline NodePtr singleRight(NodePtr b) {
   }
 }
 
-inline NodePtr doubleLeft(NodePtr a) {
-  NodePtr
+template<typename Data>
+inline NodePtr<Data> doubleLeft(NodePtr<Data> a) {
+  NodePtr<Data>
     x = a->left,
     c = a->right,
     b = c->left,
@@ -116,7 +127,7 @@ inline NodePtr doubleLeft(NodePtr a) {
     z = b->right,
     w = c->right;
   if (a->refcnt == 0 && c->refcnt == 1 && b->refcnt == 1) {
-    int y_size = size(y);
+    size_t y_size = size(y);
     b->size = a->size;
     a->size += - c->size + y_size;
     c->size -= y_size + 1;
@@ -128,7 +139,7 @@ inline NodePtr doubleLeft(NodePtr a) {
     b->refcnt = 0;
     return b;
   } else if (a->refcnt == 0 && c->refcnt == 1) {
-    int
+    size_t
       all_size = a->size,
       y_size = size(y);
     a->size += - c->size + y_size;
@@ -141,7 +152,7 @@ inline NodePtr doubleLeft(NodePtr a) {
     decref(b);
     return new Node(a, b->data, c, all_size);
   } else if (a->refcnt == 0) {
-    int
+    size_t
       all_size = a->size,
       y_size = size(y);
     a->size += - c->size + y_size;
@@ -153,7 +164,7 @@ inline NodePtr doubleLeft(NodePtr a) {
                     new Node(z, c->data, w, c->size - y_size - 1),
                     all_size);
   } else {
-    int y_size = size(y);
+    size_t y_size = size(y);
     return new Node(new Node(x, a->data, y, a->size - c->size + y_size),
                     b->data,
                     new Node(z, c->data, w, c->size - y_size - 1),
@@ -161,8 +172,9 @@ inline NodePtr doubleLeft(NodePtr a) {
   }
 }
 
-inline NodePtr doubleRight(NodePtr c) {
-  NodePtr
+template<typename Data>
+inline NodePtr<Data> doubleRight(NodePtr<Data> c) {
+  NodePtr<Data>
     a = c->left,
     x = a->left,
     b = a->right,
@@ -170,7 +182,7 @@ inline NodePtr doubleRight(NodePtr c) {
     z = b->right,
     w = c->right;
   if (c->refcnt == 0 && a->refcnt == 1 && b->refcnt == 1) {
-    int z_size = size(z);
+    size_t z_size = size(z);
     b->size = c->size;
     c->size += - a->size + z_size;
     a->size -= z_size + 1;
@@ -182,7 +194,7 @@ inline NodePtr doubleRight(NodePtr c) {
     b->refcnt = 0;
     return b;
   } else if (c->refcnt == 0 && a->refcnt == 1) {
-    int
+    size_t
       all_size = c->size,
       z_size = size(z);
     c->size += - a->size + z_size;
@@ -195,7 +207,7 @@ inline NodePtr doubleRight(NodePtr c) {
     decref(b);
     return new Node(a, b->data, c, all_size);
   } else if (c->refcnt == 0) {
-    int
+    size_t
       all_size = c->size,
       z_size = size(z);
     c->size += - a->size + z_size;
@@ -207,7 +219,7 @@ inline NodePtr doubleRight(NodePtr c) {
                     c,
                     all_size);
   } else {
-    int z_size = size(z);
+    size_t z_size = size(z);
     return new Node(new Node(x, a->data, y, a->size - z_size - 1),
                     b->data,
                     new Node(z, c->data, w, c->size - a->size + z_size),
@@ -216,16 +228,19 @@ inline NodePtr doubleRight(NodePtr c) {
 }
 
 // a < b
-inline bool isBalanced(NodePtr a, NodePtr b) {
+template<typename Data>
+inline bool isBalanced(NodePtr<Data> a, NodePtr<Data> b) {
   return 5 * (size(a) + 1) >= 2 * (size(b) + 1);
 }
 
-inline bool isSingle(NodePtr a, NodePtr b) {
+template<typename Data>
+inline bool isSingle(NodePtr<Data> a, NodePtr<Data> b) {
   return 2 * (size(a) + 1) < 3 * (size(b) + 1);
 }
 
 // t->left < t->right
-inline NodePtr balanceLeft(NodePtr t) {
+template<typename Data>
+inline NodePtr<Data> balanceLeft(NodePtr<Data> t) {
   if (isBalanced(t->left, t->right)) {
     return t;
   } else if (isSingle(t->right->left, t->right->right)) {
@@ -236,7 +251,8 @@ inline NodePtr balanceLeft(NodePtr t) {
 }
 
 // t->left > t->right
-inline NodePtr balanceRight(NodePtr t) {
+template<typename Data>
+inline NodePtr<Data> balanceRight(NodePtr<Data> t) {
   if (isBalanced(t->right, t->left)) {
     return t;
   } else if (isSingle(t->left->right, t->left->left)) {
@@ -246,43 +262,46 @@ inline NodePtr balanceRight(NodePtr t) {
   }
 }
 
-static NodePtr insert(Data v, NodePtr t) {
+template<typename Data, class Compare>
+static NodePtr<Data> insert(shared_ptr<Data> v, NodePtr<Data> t, const Compare &cmp, size_t pos) {
   if (t == nullptr) {
-    return new Node(nullptr, v, nullptr, 1);
-  } else if (v < t->data) {
+    return new Node<Data>(nullptr, v, nullptr, 1);
+  } else if (cmp(*v, *t->data)) {
     if (t->refcnt == 0) {
       decref(t->left);
-      t->left = insert(v, t->left);
+      t->left = insert(v, t->left, cmp, pos);
       t->size = 1 + size(t->left) + size(t->right);
       t->left->refcnt += 1;
       return balanceRight(t);
     } else {
-      return balanceRight(new Node(insert(v, t->left),
+      return balanceRight(new Node(insert(v, t->left, cmp, pos),
                                    t->data,
                                    t->right));
     }
-  } else if (v > t->data) {
+  } else if (cmp(*t->data, *v)) {
+    pos += size(t->left) + 1;
     if (t->refcnt == 0) {
       decref(t->right);
-      t->right = insert(v, t->right);
+      t->right = insert(v, t->right, cmp, pos);
       t->size = 1 + size(t->left) + size(t->right);
       t->right->refcnt += 1;
       return balanceLeft(t);
     } else {
       return balanceLeft(new Node(t->left,
                                   t->data,
-                                  insert(v, t->right)));
+                                  insert(v, t->right, cmp, pos)));
     }
   } else {
     return t;
   }
 }
 
-static NodePtr removeMin(NodePtr t, Data &v) {
+template<typename Data>
+static NodePtr<Data> removeMin(NodePtr<Data> t, shared_ptr<Data> &v) {
   if (t->refcnt == 0) {
     if (t->left == nullptr) {
       v = t->data;
-      NodePtr ret = t->right;
+      NodePtr<Data> ret = t->right;
       delete t;
       decref(ret);
       return ret;
@@ -306,42 +325,43 @@ static NodePtr removeMin(NodePtr t, Data &v) {
   }
 }
 
-static NodePtr remove(Data v, NodePtr t) {
+template<typename Data, class Compare>
+static NodePtr<Data> remove(const Data &v, NodePtr<Data> t, const Compare &cmp) {
   if (t == nullptr) {
     return nullptr;
-  } else if (v < t->data) {
+  } else if (cmp(v, *t->data)) {
     if (t->refcnt == 0) {
       decref(t->left);
-      t->left = remove(v, t->left);
+      t->left = remove(v, t->left, cmp);
       t->size = 1 + size(t->left) + size(t->right);
       incref(t->left);
       return balanceLeft(t);
     } else {
-      return balanceLeft(new Node(remove(v, t->left),
+      return balanceLeft(new Node(remove(v, t->left, cmp),
                                   t->data,
                                   t->right));
     }
-  } else if (v > t->data) {
+  } else if (cmp(*t->data, v)) {
     if (t->refcnt == 0) {
       decref(t->right);
-      t->right = remove(v, t->right);
+      t->right = remove(v, t->right, cmp);
       t->size = 1 + size(t->left) + size(t->right);
       incref(t->right);
       return balanceRight(t);
     } else {
       return balanceRight(new Node(t->left,
                                    t->data,
-                                   remove(v, t->right)));
+                                   remove(v, t->right, cmp)));
     }
   } else {
     if (t->refcnt == 0) {
       if (t->left == nullptr) {
-        NodePtr ret = t->right;
+        NodePtr<Data> ret = t->right;
         delete t;
         decref(ret);
         return ret;
       } else if (t->right == nullptr) {
-        NodePtr ret = t->left;
+        NodePtr<Data> ret = t->left;
         delete t;
         decref(ret);
         return ret;
@@ -358,8 +378,8 @@ static NodePtr remove(Data v, NodePtr t) {
       } else if (t->right == nullptr) {
         return t->left;
       } else {
-        Data min(-1);
-        NodePtr r = removeMin(t->right, min);
+        shared_ptr<Data> min;
+        NodePtr<Data> r = removeMin(t->right, min);
         return balanceRight(new Node(t->left,
                                      min,
                                      r,
@@ -369,8 +389,9 @@ static NodePtr remove(Data v, NodePtr t) {
   }
 }
 
-static Data at(int p, NodePtr t) {
-  int sz = size(t->left);
+template<typename Data>
+static Data at(size_t p, NodePtr<Data> t) {
+  size_t sz = size(t->left);
   if (sz == p) {
     return t->data;
   } else if (sz < p) {
@@ -380,53 +401,50 @@ static Data at(int p, NodePtr t) {
   }
 }
 
-static int nlt(Data v, NodePtr t) {
+template<typename Data, class Compare>
+static size_t nle(const Data &v, NodePtr<Data> t, const Compare &cmp) {
   if (t == nullptr) {
     return 0;
-  } else if (t->data >= v) {
-    return nlt(v, t->left);
+  } else if (cmp(v, *t->data)) {
+    return nle(v, t->left, cmp);
   } else {
-    return 1 + size(t->left) + nlt(v, t->right);
+    return 1 + size(t->left) + nle(v, t->right, cmp);
   }
 }
 
-static int ngt(Data v, NodePtr t) {
+template<typename Data, class Compare>
+static size_t nge(const Data &v, NodePtr<Data> t, const Compare &cmp) {
   if (t == nullptr) {
     return 0;
-  } else if (t->data <= v) {
-    return ngt(v, t->right);
+  } else if (cmp(*t->data, v)) {
+    return nge(v, t->right, cmp);
   } else {
-    return 1 + size(t->right) + ngt(v, t->left);
+    return 1 + size(t->right) + nge(v, t->left, cmp);
   }
 }
 
-inline int nbetween(Data a, Data b, NodePtr t) {
-  return size(t) - nlt(a, t) - ngt(b, t);
+template<typename Data, class Compare>
+inline size_t nbetween(const Data &a, const Data &b, NodePtr<Data> t, const Compare &cmp) {
+  return nle(b, t, cmp) + nge(a, t, cmp) - size(t);
 }
 
-static bool member(Data v, NodePtr t) {
+template<typename Data, class Compare>
+static bool member(const Data &v, NodePtr<Data> t, const Compare &cmp, size_t pos) {
   if (t == nullptr) {
     return false;
-  } else if (v < t->data) {
-    return member(v, t->left);
-  } else if (v > t->data) {
-    return member(v, t->right);
+  } else if (cmp(v, *t->data)) {
+    return member(v, t->left, cmp, pos);
+  } else if (cmp(*t->data, v)) {
+    pos += size(t->left) + 1;
+    return member(v, t->right, cmp, pos);
   } else {
+    pos += size(t->left);
     return true;
   }
 }
 
-void printTree(NodePtr t) {
-  if (t != nullptr) {
-    fprintf(stderr, "(");
-    printTree(t->left);
-    fprintf(stderr, " %lld [%d] ", t->data, t->refcnt);
-    printTree(t->right);
-    fprintf(stderr, ")");
-  }
-}
-
-static void freeTree(NodePtr t) {
+template<typename Data>
+static void freeTree(NodePtr<Data> t) {
   if (t != nullptr) {
     if (t->refcnt == 0) {
       decref(t->left);
@@ -440,86 +458,36 @@ static void freeTree(NodePtr t) {
 
 }
 
+template<typename Data, class Compare = std::less<Data>>
 class ESet {
 private:
-  wbt::NodePtr root;
+  wbt::NodePtr<Data> root;
+  Compare cmp;
 public:
-  ESet() : root(nullptr) {}
-  ESet(const ESet &other) : root(other.root) {
-    wbt::incref(root);
-  }
-  ~ESet() {
-    wbt::decref(root);
-    wbt::freeTree(root);
-}
-
-  ESet &operator=(const ESet &other) {
-    wbt::decref(root);
-    root = other.root;
-    wbt::incref(root);
-    return *this;
-  }
-
-  void insert(Data v) {
-    wbt::decref(root);
-    root = wbt::insert(v, root);
-    wbt::incref(root);
-  }
-
-  void erase(Data v) {
-    wbt::decref(root);
-    root = wbt::remove(v, root);
-    wbt::incref(root);
-  }
-
-  int size() const {
-    return wbt::size(root);
-  }
-
-  bool empty() const {
-    return root == nullptr;
-  }
-
-  int countBetween(Data a, Data b) const {
-    return wbt::nbetween(a, b, root);
-  }
-
-  bool has(Data v) const {
-    return wbt::member(v, root);
-  }
-
-  Data at(int pos) const {
-    return wbt::at(pos, root);
-  }
-
-  Data operator[](int pos) const {
-    return at(pos);
-  }
-
   class iterator {
     friend class ESet;
   private:
-    ESet *iteratee;
-    int index;
-    iterator(ESet *iteratee, int index) : iteratee(iteratee), index(index) {}
+    const ESet *iteratee;
+    size_t index;
+    iterator(const ESet *iteratee, size_t index) : iteratee(iteratee), index(index) {}
   public:
     iterator &operator=(const iterator &other) = default;
     
-    iterator &operator+=(const int &n) {
+    iterator &operator+=(const size_t &n) {
       index += n;
       return *this;
     }
 
-    iterator &operator-=(const int &n) {
+    iterator &operator-=(const size_t &n) {
       return (*this += (-n));
     }
 
-    iterator operator+(const int &n) const {
+    iterator operator+(const size_t &n) const {
       iterator tmp = *this;
       return tmp += n;
     }
 
-    iterator operator-(const int &n) const {
+    iterator operator-(const size_t &n) const {
       return (*this + (-n));
     }
 
@@ -558,62 +526,94 @@ public:
 
   friend class iterator;
 
-  iterator begin() {
+  iterator begin() const {
     return iterator(this, 0);
   }
 
-  iterator end() {
+  iterator end() const {
     return iterator(this, size());
   }
 
-  void show() const {
-    wbt::printTree(root);
-    fprintf(stderr, "\n");
+  ESet() : cmp(Compare()), root(nullptr) {}
+  ESet(const ESet &other) : cmp(other.cmp), root(other.root) {
+    wbt::incref(root);
   }
-};
+  ESet(ESet &&other) : cmp(other.cmp), root(other.root) {}
+  ~ESet() {
+    wbt::decref(root);
+    wbt::freeTree(root);
+  }
 
-#include "io.h"
-#include <vector>
-#include <iostream>
-#include <chrono>
+  ESet &operator=(const ESet &other) {
+    wbt::decref(root);
+    root = other.root;
+    wbt::incref(root);
+    return *this;
+  }
 
-using namespace std;
+  ESet &operator=(ESet &&other) {
+    wbt::decref(root);
+    root = other.root;
+    return *this;
+  }
 
-int main() {
-  auto begin = std::chrono::high_resolution_clock::now();
-  vector<ESet> sets = { ESet() };
-
-  enum op o;
-  int i = 0;
-  long long rand1 = 0;
-  long long rand2 = 0;
-  int t = 0;
-
-  while (read(o, i, rand1, rand2) != -1) {
-    switch (o) {
-    case INS:
-      sets[i].insert(rand1);
-      break;
-    case DEL:
-      sets[i].erase(rand1);
-      break;
-    case ASK:
-      write(sets[i].has(rand1));
-      break;
-    case FRK:
-      sets.emplace_back(sets[i]);
-      break;
-    case RAN:
-      write(sets[i].countBetween(rand1, rand2));
-      break;
-    case PRE:
-    case SUC:
-      break;
+  template<class... Args>
+  std::pair<iterator, bool> emplace(Args&&... args) {
+    wbt::decref(root);
+    size_t pos = 0;
+    size_t osize = wbt::size(root);
+    root = wbt::insert(std::make_shared<Data>(args...), root, cmp, pos);
+    wbt::incref(root);
+    if (osize == root->size) {
+      return {end(), false};
+    } else {
+      return {iterator(this, pos), true};
     }
   }
 
-  auto end = std::chrono::high_resolution_clock::now();
-  std::cerr << std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin)
-                   .count()
-            << std::endl;
-}
+  size_t erase(const Data &v) {
+    wbt::decref(root);
+    size_t osize = root->size;
+    root = wbt::remove(v, root, cmp);
+    wbt::incref(root);
+    return osize - wbt::size(root);
+  }
+
+  size_t size() const {
+    return wbt::size(root);
+  }
+
+  bool empty() const {
+    return root == nullptr;
+  }
+
+  iterator find(const Data &a) const {
+    size_t pos = 0;
+    if (wbt::member(a, root, cmp, pos)) {
+      return iterator(this, pos);
+    } else {
+      return end();
+    }
+  }
+
+  size_t range(const Data &a, const Data &b) const {
+    return wbt::nbetween(a, b, root, cmp);
+  }
+
+  iterator lower_bound(const Data &a) const {
+    return iterator(this, size(root) - wbt::nge(a, root, cmp));
+  }
+
+  iterator upper_bound(const Data &a) const {
+    return iterator(this, wbt::nle(a, root, cmp));
+  }
+
+  Data at(size_t pos) const {
+    return wbt::at(pos, root);
+  }
+
+  Data operator[](size_t pos) const {
+    return at(pos);
+  }
+};
+

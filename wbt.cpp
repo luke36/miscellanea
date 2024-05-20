@@ -263,7 +263,7 @@ inline NodePtr<Data> balanceRight(NodePtr<Data> t) {
 }
 
 template<typename Data, class Compare>
-static NodePtr<Data> insert(shared_ptr<Data> v, NodePtr<Data> t, const Compare &cmp, size_t pos) {
+static NodePtr<Data> insert(shared_ptr<Data> v, NodePtr<Data> t, const Compare &cmp, size_t &pos) {
   if (t == nullptr) {
     return new Node<Data>(nullptr, v, nullptr, 1);
   } else if (cmp(*v, *t->data)) {
@@ -390,10 +390,10 @@ static NodePtr<Data> remove(const Data &v, NodePtr<Data> t, const Compare &cmp) 
 }
 
 template<typename Data>
-static Data at(size_t p, NodePtr<Data> t) {
+static Data &at(size_t p, NodePtr<Data> t) {
   size_t sz = size(t->left);
   if (sz == p) {
-    return t->data;
+    return *t->data;
   } else if (sz < p) {
     return at(p - sz - 1, t->right);
   } else {
@@ -429,7 +429,7 @@ inline size_t nbetween(const Data &a, const Data &b, NodePtr<Data> t, const Comp
 }
 
 template<typename Data, class Compare>
-static bool member(const Data &v, NodePtr<Data> t, const Compare &cmp, size_t pos) {
+static bool member(const Data &v, NodePtr<Data> t, const Compare &cmp, size_t &pos) {
   if (t == nullptr) {
     return false;
   } else if (cmp(v, *t->data)) {
@@ -546,6 +546,7 @@ public:
 
   ESet &operator=(const ESet &other) {
     wbt::decref(root);
+    wbt::freeTree(root);
     root = other.root;
     wbt::incref(root);
     return *this;
@@ -553,6 +554,7 @@ public:
 
   ESet &operator=(ESet &&other) {
     wbt::decref(root);
+    wbt::freeTree(root);
     root = other.root;
     return *this;
   }
@@ -573,7 +575,7 @@ public:
 
   size_t erase(const Data &v) {
     wbt::decref(root);
-    size_t osize = root->size;
+    size_t osize = wbt::size(root);
     root = wbt::remove(v, root, cmp);
     wbt::incref(root);
     return osize - wbt::size(root);
@@ -616,4 +618,3 @@ public:
     return at(pos);
   }
 };
-
